@@ -1,10 +1,23 @@
-import os
-from pydantic import BaseModel
+"""
+Application configuration.
+
+Loads settings from environment variables or .env file
+using Pydantic BaseSettings.
+"""
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseModel):
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql+psycopg2://furkan:1234@localhost:5432/testdb")
-    API_KEY: str = os.getenv("API_KEY", "secret")
+class Settings(BaseSettings):
+    """Central application configuration class."""
+
+    DATABASE_URL: str
+    API_KEY: str
+
+    # Pydantic settings config
+    model_config = SettingsConfigDict(
+        env_file=".env")
 
 
+# Singleton instance
 settings = Settings()
