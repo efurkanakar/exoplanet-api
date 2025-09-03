@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-# Router'ları import ediyoruz
+
 from app.api.routes.health import router as health_router
 from app.api.routes.planets import router as planets_router
 from app.api.routes.visualization import router as vis_router
@@ -12,7 +12,7 @@ app = FastAPI(
     swagger_ui_parameters={"tryItOutEnabled": True},
 )
 
-# Router'ları ekleme
+
 app.include_router(health_router)
 app.include_router(planets_router)
 app.include_router(vis_router)

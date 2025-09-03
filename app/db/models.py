@@ -18,5 +18,5 @@ class Planet(Base):
     st_mass: Mapped[float] = Column(Float, nullable=False)
 
     # Soft delete
-    is_deleted: Mapped[bool] = Column(Boolean, nullable=False, default=False)
-    deleted_at: Mapped[datetime | None] = Column(DateTime, nullable=True)
+    is_deleted = Column(Boolean, nullable=False, default=False)
+    deleted_at = Column(DateTime, nullable=True)
