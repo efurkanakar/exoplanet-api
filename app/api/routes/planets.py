@@ -20,7 +20,7 @@ Endpoints:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, Response, status, Request
-from typing import List
+from typing import List, Literal
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -32,6 +32,8 @@ from app.db.models import Planet
 from app.schemas.planet import PlanetCreate, PlanetOut, PlanetUpdate, PlanetCount, MethodCount, DeletedPlanetOut
 from app.core.security import api_key_auth
 
+import logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/planets", tags=["planets"])
 
@@ -96,6 +98,7 @@ def create_planet(
         raise HTTPException(status_code=500, detail="Database error while creating planet.")
 
     db.refresh(planet)
+
     return planet
 
 @router.get(
@@ -401,6 +404,53 @@ def delete_planet(planet_id: int, db: Session = Depends(get_db)):
     return
 
 
+@router.delete(
+    "/admin/hard-delete/{planet_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Hard delete a single planet (only if soft-deleted)",
+    description="Permanently deletes a planet from the database, allowed only if it was previously soft-deleted.",
+    dependencies=[Depends(api_key_auth)],
+)
+def hard_delete_planet(
+    planet_id: int,
+    confirm: Literal[True, False] = Query(..., description="Must be true to proceed"),
+    db: Session = Depends(get_db),
+):
+    """
+    Permanently delete a planet record (hard delete).
+
+    Unlike soft delete, this operation removes the planet completely
+    from the database. Only planets that are already soft-deleted can
+    be hard-deleted, ensuring accidental data loss is avoided.
+
+    Args:
+        planet_id (int): The ID of the planet to hard delete.
+        confirm (bool): Must be True (`?confirm=true`) to proceed.
+        db (Session): SQLAlchemy database session.
+
+    Returns:
+        None: Responds with 204 No Content on success.
+
+    Raises:
+        HTTPException 400: If `confirm=true` is not provided.
+        HTTPException 404: If the planet does not exist.
+        HTTPException 409: If the planet is not soft-deleted.
+    """
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Add ?confirm=true to proceed")
+
+    planet = db.get(Planet, planet_id)
+    if not planet:
+        raise HTTPException(status_code=404, detail=f"Planet {planet_id} not found")
+
+    if not planet.is_deleted:
+        raise HTTPException(status_code=409, detail="Planet is not soft-deleted")
+
+    db.delete(planet)
+    db.commit()
+    return
+
+
 
 @router.post(
     "/{planet_id}/restore",
@@ -448,7 +498,7 @@ def restore_planet(planet_id: int, db: Session = Depends(get_db)):
     description="Dangerous operation: truncates the planets table and resets identity.",
     dependencies=[Depends(api_key_auth)],
 )
-def wipe_planets(confirm: bool = Query(False, description="Set true to actually delete all rows"),
+def wipe_planets(confirm: Literal[True, False] = Query(..., description="Set true to actually delete all rows"),
                  db: Session = Depends(get_db)):
     """
     Truncate the planets table and reset identity (admin only).

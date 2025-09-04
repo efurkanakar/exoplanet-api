@@ -39,7 +39,7 @@ def root() -> RootOut:
     response_model=HealthOut,
     status_code=status.HTTP_200_OK,
     summary="Liveness health check",
-    description="Cheap liveness probe to confirm the process is alive."
+    description="Liveness probe to confirm the process is alive."
 )
 def health() -> HealthOut:
     """

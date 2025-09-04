@@ -2,7 +2,7 @@
 Visualization routes for the Exoplanet API.
 
 This module renders simple, on-the-fly charts as PNG images:
-- Histogram of host star effective temperature (Teff)
+- Histogram of host star effective temperature (T_eff)
 - Discoveries by year (bar chart)
 - Discoveries by method (horizontal bar chart)
 
