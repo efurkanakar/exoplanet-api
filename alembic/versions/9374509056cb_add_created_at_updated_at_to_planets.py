@@ -9,7 +9,6 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = '9374509056cb'
@@ -18,21 +17,18 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-def upgrade():
+def upgrade() -> None:
     op.add_column(
-        'planets',
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=False)
+        "planets",
+        sa.Column("is_deleted", sa.Boolean(), nullable=False, server_default=sa.false()),
     )
     op.add_column(
-        'planets',
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=False)
+        "planets",
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
     )
-
-    op.alter_column('planets', 'created_at', server_default=None)
-    op.alter_column('planets', 'updated_at', server_default=None)
+    op.alter_column("planets", "is_deleted", server_default=None)
 
 
-
-def downgrade():
-    op.drop_column('planets', 'updated_at')
-    op.drop_column('planets', 'created_at')
+def downgrade() -> None:
+    op.drop_column("planets", "deleted_at")
+    op.drop_column("planets", "is_deleted")

@@ -17,7 +17,6 @@ from app.schemas.system import RootOut, HealthOut, ReadinessOut
 router = APIRouter(prefix="/system", tags=["system"])
 
 
-
 @router.get(
     "/root",
     response_model=RootOut,
