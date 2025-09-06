@@ -1,9 +1,4 @@
-"""
-Application configuration.
-
-Loads settings from environment variables or .env file
-using Pydantic BaseSettings.
-"""
+# app/core/config.py
 import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -13,7 +8,8 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_FILE: str = "logs/app.log"
 
-    _env_file = ".env" if os.getenv("ENV", "").lower() not in {"prod", "production"} and not os.getenv("RENDER") else None
-    model_config = SettingsConfigDict(env_file=_env_file)
+    model_config = SettingsConfigDict(
+        env_file=None if os.getenv("ENV", "").lower() in {"prod","production"} or os.getenv("RENDER") else ".env"
+    )
 
 settings = Settings()
