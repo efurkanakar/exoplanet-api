@@ -19,6 +19,13 @@ config = context.config
 
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
+
+try:
+    from app.db import models  # noqa: F401
+except Exception as e:
+    raise RuntimeError(f"Could not import models for Alembic: {e}")
+
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
