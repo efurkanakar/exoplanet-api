@@ -54,6 +54,37 @@ async def access_log_middleware(request: Request, call_next):
         # isteğin sonunda rid sıfırlansın
         REQUEST_ID_FILTER.request_id = "-"
 
+from sqlalchemy import create_engine, text
+from app.core.config import settings
+
+def _safe_dsn(url: str) -> str:
+    try:
+        from urllib.parse import urlparse
+        u = urlparse(url)
+        host = u.hostname or "-"
+        db = (u.path or "/")[1:] or "-"
+        return f"{u.scheme}://***:***@{host}:{u.port or '-'} / {db}"
+    except Exception:
+        return "<unparseable>"
+
+def log_db_state():
+    dsn = settings.DATABASE_URL
+    print(f"[BOOT] DATABASE_URL => {_safe_dsn(dsn)}")
+    eng = create_engine(dsn)
+    with eng.begin() as conn:
+        ver = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one_or_none()
+        print(f"[BOOT] alembic_version => {ver}")
+        cols = conn.execute(text("""
+            SELECT table_schema, column_name
+            FROM information_schema.columns
+            WHERE table_name = 'planets'
+            ORDER BY column_name
+        """)).fetchall()
+        print(f"[BOOT] planets columns => {cols}")
+
+log_db_state()
+
+
 
 app.include_router(health_router)
 app.include_router(planets_router)
