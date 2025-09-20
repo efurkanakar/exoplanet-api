@@ -55,6 +55,92 @@ def _empty_png() -> StreamingResponse:
 
 
 @router.get(
+    "/discovery",
+    summary="Get discovery datasets",
+    description=(
+        "Returns the raw data series used by the discovery charts.\n\n"
+        "- `hist`: Histogram bins/counts for host star effective temperature\n"
+        "- `year`: Discoveries per year\n"
+        "- `method`: Discoveries per discovery method"
+    ),
+)
+def vis_discovery_data(
+    db: Session = Depends(get_db),
+    chart: Literal["hist", "year", "method"] = Query(..., description="Which dataset to return"),
+    bins: int = Query(30, ge=5, le=200, description="Number of histogram bins (for chart=hist)"),
+    sigma: float = Query(3.0, ge=0.0, le=10.0, description="Sigma clipping for histogram (0 disables clipping)"),
+):
+    """Return JSON datasets mirroring the PNG visualisations."""
+
+    if chart == "hist":
+        vals = db.execute(select(Planet.st_teff)).scalars().all()
+        vals = [v for v in vals if v is not None]
+
+        if not vals:
+            return {"chart": "hist", "counts": [], "bin_edges": [], "mean": None, "std": None, "lower": None, "upper": None}
+
+        data = np.asarray(vals, dtype=float)
+        mu = float(np.mean(data))
+        sd = float(np.std(data))
+
+        lower = upper = None
+        if sigma > 0 and sd > 0:
+            lower = mu - sigma * sd
+            upper = mu + sigma * sd
+            data = data[(data >= lower) & (data <= upper)]
+
+        counts, edges = np.histogram(data, bins=bins)
+
+        return {
+            "chart": "hist",
+            "bins": bins,
+            "counts": counts.astype(int).tolist(),
+            "bin_edges": edges.astype(float).tolist(),
+            "mean": mu,
+            "std": sd,
+            "lower": float(lower) if lower is not None else None,
+            "upper": float(upper) if upper is not None else None,
+        }
+
+    if chart == "year":
+        rows = (
+            db.execute(
+                select(Planet.disc_year, func.count())
+                .where(Planet.disc_year.isnot(None))
+                .where(Planet.is_deleted == False)
+                .group_by(Planet.disc_year)
+                .order_by(Planet.disc_year.asc())
+            ).all()
+        )
+
+        return {
+            "chart": "year",
+            "series": [
+                {"disc_year": int(year), "count": int(count)}
+                for year, count in rows
+            ],
+        }
+
+    rows = (
+        db.execute(
+            select(Planet.disc_method, func.count())
+            .where(Planet.disc_method.isnot(None))
+            .where(Planet.is_deleted == False)
+            .group_by(Planet.disc_method)
+            .order_by(func.count().desc())
+        ).all()
+    )
+
+    return {
+        "chart": "method",
+        "series": [
+            {"disc_method": method, "count": int(count)}
+            for method, count in rows
+        ],
+    }
+
+
+@router.get(
     "/discovery.png",
     summary="Render discovery charts",
     description=(

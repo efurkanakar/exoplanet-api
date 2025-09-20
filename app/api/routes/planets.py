@@ -1,26 +1,7 @@
-"""
-Planet API routes.
-
-This module defines all RESTful API endpoints related to the `Planet` entity.
-It covers CRUD operations, soft-delete/restore functionality, and reporting
-utilities such as counting and grouping by discovery method.
-
-Endpoints:
-    - POST   /planets/             : Create a new planet
-    - GET    /planets/             : List planets with optional filters
-    - GET    /planets/count        : Count all active planets
-    - GET    /planets/method-counts: Aggregate planets by discovery method
-    - GET    /planets/{id}         : Retrieve a planet by ID
-    - GET    /planets/by-name/{n}  : Retrieve a planet by name
-    - PATCH  /planets/{id}         : Partially update a planet
-    - DELETE /planets/{id}         : Soft-delete a planet
-    - POST   /planets/{id}/restore : Restore a soft-deleted planet
-    - GET    /planets/admin/deleted: List deleted planets (admin only)
-    - DELETE /planets/admin/delete-all : Truncate planets table (admin only)
-"""
+"""Planet API routes with advanced filtering, analytics and admin utilities."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, Response, status, Request
-from typing import List, Literal
+from typing import Literal
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -29,7 +10,18 @@ from datetime import datetime, timezone
 
 from app.db.session import get_db
 from app.db.models import Planet
-from app.schemas.planet import PlanetCreate, PlanetOut, PlanetUpdate, PlanetCount, MethodCount, DeletedPlanetOut
+from app.schemas.planet import (
+    PlanetCreate,
+    PlanetOut,
+    PlanetUpdate,
+    PlanetCount,
+    MethodCount,
+    DeletedPlanetOut,
+    PlanetStats,
+    PlanetMethodStats,
+    PlanetTimelinePoint,
+    PlanetListResponse,
+)
 from app.core.security import api_key_auth
 
 import logging
@@ -103,59 +95,157 @@ def create_planet(
 
 @router.get(
     "/",
-    response_model=List[PlanetOut],
+    response_model=PlanetListResponse,
     summary="List planets",
-    description="Lists non-deleted planets with optional filters and pagination."
+    description="Lists planets with comprehensive filtering, sorting and pagination metadata."
 )
 def list_planets(
     db: Session = Depends(get_db),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    name: str | None = None,
-    min_year: int | None = None,
-    max_year: int | None = None,
-    include_deleted: bool = False,
+    name: str | None = Query(
+        None,
+        description="Case-insensitive substring search on planet name",
+    ),
+    disc_method: str | None = Query(
+        None,
+        description="Exact discovery method filter (case-insensitive)",
+    ),
+    min_year: int | None = Query(None, ge=0, description="Minimum discovery year (inclusive)"),
+    max_year: int | None = Query(None, ge=0, description="Maximum discovery year (inclusive)"),
+    min_orbperd: float | None = Query(None, gt=0, description="Minimum orbital period (days)"),
+    max_orbperd: float | None = Query(None, gt=0, description="Maximum orbital period (days)"),
+    min_rade: float | None = Query(None, gt=0, description="Minimum planet radius (Earth radii)"),
+    max_rade: float | None = Query(None, gt=0, description="Maximum planet radius (Earth radii)"),
+    min_masse: float | None = Query(None, gt=0, description="Minimum planet mass (Earth masses)"),
+    max_masse: float | None = Query(None, gt=0, description="Maximum planet mass (Earth masses)"),
+    min_st_teff: float | None = Query(None, gt=0, description="Minimum host star effective temperature (K)"),
+    max_st_teff: float | None = Query(None, gt=0, description="Maximum host star effective temperature (K)"),
+    min_st_rad: float | None = Query(None, gt=0, description="Minimum host star radius (Solar radii)"),
+    max_st_rad: float | None = Query(None, gt=0, description="Maximum host star radius (Solar radii)"),
+    min_st_mass: float | None = Query(None, gt=0, description="Minimum host star mass (Solar masses)"),
+    max_st_mass: float | None = Query(None, gt=0, description="Maximum host star mass (Solar masses)"),
+    include_deleted: bool = Query(False, description="Include soft-deleted planets as well"),
+    sort_by: Literal[
+        "id",
+        "name",
+        "disc_year",
+        "disc_method",
+        "orbperd",
+        "rade",
+        "masse",
+        "st_teff",
+        "st_rad",
+        "st_mass",
+        "created_at",
+    ] = Query("id", description="Column to sort by"),
+    sort_order: Literal["asc", "desc"] = Query("desc", description="Sort direction"),
 ):
-    """
-    Retrieve a list of planets.
+    """Retrieve planets with advanced filtering, sorting and pagination metadata."""
 
-    Returns planets that are not soft-deleted by default, with support for
-    basic filtering and pagination.
-
-    Args:
-        db (Session): SQLAlchemy database session.
-        limit (int): Page size (1–200).
-        offset (int): Number of records to skip.
-        name (str | None): Case-insensitive substring filter on planet name.
-        min_year (int | None): Minimum discovery year (inclusive).
-        max_year (int | None): Maximum discovery year (inclusive).
-        include_deleted (bool): If True, include soft-deleted records as well.
-
-    Returns:
-        List[PlanetOut]: The list of planets matching the criteria.
-    """
-
-    stmt = select(Planet)
+    conditions = []
     if not include_deleted:
-        stmt = stmt.where(Planet.is_deleted == False)
+        conditions.append(Planet.is_deleted == False)
 
     if min_year is not None and max_year is not None and min_year > max_year:
         raise HTTPException(status_code=400, detail="min_year must be <= max_year")
 
+    if min_orbperd is not None and max_orbperd is not None and min_orbperd > max_orbperd:
+        raise HTTPException(status_code=400, detail="min_orbperd must be <= max_orbperd")
+
+    if min_rade is not None and max_rade is not None and min_rade > max_rade:
+        raise HTTPException(status_code=400, detail="min_rade must be <= max_rade")
+
+    if min_masse is not None and max_masse is not None and min_masse > max_masse:
+        raise HTTPException(status_code=400, detail="min_masse must be <= max_masse")
+
+    if min_st_teff is not None and max_st_teff is not None and min_st_teff > max_st_teff:
+        raise HTTPException(status_code=400, detail="min_st_teff must be <= max_st_teff")
+
+    if min_st_rad is not None and max_st_rad is not None and min_st_rad > max_st_rad:
+        raise HTTPException(status_code=400, detail="min_st_rad must be <= max_st_rad")
+
+    if min_st_mass is not None and max_st_mass is not None and min_st_mass > max_st_mass:
+        raise HTTPException(status_code=400, detail="min_st_mass must be <= max_st_mass")
+
     if name:
         q = name.strip()
         if q:
-            stmt = stmt.where(func.ilike(Planet.name, f"%{q}%"))
+            conditions.append(Planet.name.ilike(f"%{q}%"))
+
+    if disc_method:
+        normalized_method = disc_method.strip()
+        if normalized_method:
+            conditions.append(func.lower(Planet.disc_method) == normalized_method.lower())
 
     if min_year is not None:
-        stmt = stmt.where(Planet.disc_year >= min_year)
+        conditions.append(Planet.disc_year >= min_year)
     if max_year is not None:
-        stmt = stmt.where(Planet.disc_year <= max_year)
+        conditions.append(Planet.disc_year <= max_year)
 
+    if min_orbperd is not None:
+        conditions.append(Planet.orbperd >= min_orbperd)
+    if max_orbperd is not None:
+        conditions.append(Planet.orbperd <= max_orbperd)
 
-    stmt = stmt.order_by(Planet.id.desc()).limit(limit).offset(offset)
+    if min_rade is not None:
+        conditions.append(Planet.rade >= min_rade)
+    if max_rade is not None:
+        conditions.append(Planet.rade <= max_rade)
 
-    return db.execute(stmt).scalars().all()
+    if min_masse is not None:
+        conditions.append(Planet.masse >= min_masse)
+    if max_masse is not None:
+        conditions.append(Planet.masse <= max_masse)
+
+    if min_st_teff is not None:
+        conditions.append(Planet.st_teff >= min_st_teff)
+    if max_st_teff is not None:
+        conditions.append(Planet.st_teff <= max_st_teff)
+
+    if min_st_rad is not None:
+        conditions.append(Planet.st_rad >= min_st_rad)
+    if max_st_rad is not None:
+        conditions.append(Planet.st_rad <= max_st_rad)
+
+    if min_st_mass is not None:
+        conditions.append(Planet.st_mass >= min_st_mass)
+    if max_st_mass is not None:
+        conditions.append(Planet.st_mass <= max_st_mass)
+
+    sortable_fields = {
+        "id": Planet.id,
+        "name": Planet.name,
+        "disc_year": Planet.disc_year,
+        "disc_method": Planet.disc_method,
+        "orbperd": Planet.orbperd,
+        "rade": Planet.rade,
+        "masse": Planet.masse,
+        "st_teff": Planet.st_teff,
+        "st_rad": Planet.st_rad,
+        "st_mass": Planet.st_mass,
+        "created_at": Planet.created_at,
+    }
+
+    order_column = sortable_fields[sort_by]
+    primary_order = order_column.asc() if sort_order == "asc" else order_column.desc()
+    secondary_order = Planet.id.asc() if sort_order == "asc" else Planet.id.desc()
+
+    stmt = select(Planet)
+    if conditions:
+        stmt = stmt.where(*conditions)
+
+    total_stmt = select(func.count()).select_from(Planet)
+    if conditions:
+        total_stmt = total_stmt.where(*conditions)
+
+    total = db.execute(total_stmt).scalar_one()
+
+    stmt = stmt.order_by(primary_order, secondary_order).limit(limit).offset(offset)
+
+    items = db.execute(stmt).scalars().all()
+
+    return PlanetListResponse(items=items, limit=limit, offset=offset, total=int(total))
 
 
 @router.get(
@@ -219,6 +309,166 @@ def method_counts(db: Session = Depends(get_db)):
         {"disc_method": m, "count": int(c)}
         for m, c in rows
     ]
+
+
+@router.get(
+    "/stats",
+    response_model=PlanetStats,
+    summary="Get aggregate planet statistics",
+    description="Returns min/max/average values for key planet and host star metrics.",
+)
+def planet_statistics(db: Session = Depends(get_db)):
+    """Return aggregated statistics for all non-deleted planets."""
+
+    stats_stmt = (
+        select(
+            func.count(Planet.id).label("count"),
+            func.min(Planet.orbperd).label("orbperd_min"),
+            func.max(Planet.orbperd).label("orbperd_max"),
+            func.avg(Planet.orbperd).label("orbperd_avg"),
+            func.min(Planet.rade).label("rade_min"),
+            func.max(Planet.rade).label("rade_max"),
+            func.avg(Planet.rade).label("rade_avg"),
+            func.min(Planet.masse).label("masse_min"),
+            func.max(Planet.masse).label("masse_max"),
+            func.avg(Planet.masse).label("masse_avg"),
+            func.min(Planet.st_teff).label("st_teff_min"),
+            func.max(Planet.st_teff).label("st_teff_max"),
+            func.avg(Planet.st_teff).label("st_teff_avg"),
+            func.min(Planet.st_rad).label("st_rad_min"),
+            func.max(Planet.st_rad).label("st_rad_max"),
+            func.avg(Planet.st_rad).label("st_rad_avg"),
+            func.min(Planet.st_mass).label("st_mass_min"),
+            func.max(Planet.st_mass).label("st_mass_max"),
+            func.avg(Planet.st_mass).label("st_mass_avg"),
+        )
+        .where(Planet.is_deleted == False)
+    )
+
+    result = db.execute(stats_stmt).mappings().one()
+
+    def _summary(prefix: str) -> dict[str, float | None]:
+        return {
+            "min": float(result[f"{prefix}_min"]) if result[f"{prefix}_min"] is not None else None,
+            "max": float(result[f"{prefix}_max"]) if result[f"{prefix}_max"] is not None else None,
+            "avg": float(result[f"{prefix}_avg"]) if result[f"{prefix}_avg"] is not None else None,
+        }
+
+    return PlanetStats(
+        count=int(result["count"] or 0),
+        orbperd=_summary("orbperd"),
+        rade=_summary("rade"),
+        masse=_summary("masse"),
+        st_teff=_summary("st_teff"),
+        st_rad=_summary("st_rad"),
+        st_mass=_summary("st_mass"),
+    )
+
+
+@router.get(
+    "/timeline",
+    response_model=list[PlanetTimelinePoint],
+    summary="Get discovery timeline",
+    description="Returns the number of planets discovered for each year.",
+)
+def planet_timeline(
+    db: Session = Depends(get_db),
+    start_year: int | None = Query(None, ge=0, description="Optional start year filter"),
+    end_year: int | None = Query(None, ge=0, description="Optional end year filter"),
+    include_deleted: bool = Query(False, description="Include soft-deleted discoveries"),
+):
+    """Return discovery counts grouped by year with optional bounds."""
+
+    if start_year is not None and end_year is not None and start_year > end_year:
+        raise HTTPException(status_code=400, detail="start_year must be <= end_year")
+
+    stmt = select(Planet.disc_year, func.count()).group_by(Planet.disc_year)
+
+    if not include_deleted:
+        stmt = stmt.where(Planet.is_deleted == False)
+    if start_year is not None:
+        stmt = stmt.where(Planet.disc_year >= start_year)
+    if end_year is not None:
+        stmt = stmt.where(Planet.disc_year <= end_year)
+
+    stmt = stmt.order_by(Planet.disc_year.asc())
+
+    rows = db.execute(stmt).all()
+
+    return [
+        PlanetTimelinePoint(disc_year=int(year), count=int(count))
+        for year, count in rows
+    ]
+
+
+@router.get(
+    "/method/{disc_method}/stats",
+    response_model=PlanetMethodStats,
+    summary="Get statistics for a discovery method",
+    description="Returns aggregate statistics scoped to a specific discovery method.",
+)
+def method_statistics(disc_method: str, db: Session = Depends(get_db)):
+    """Return aggregated statistics for the provided discovery method."""
+
+    normalized = disc_method.strip()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Discovery method must be provided")
+
+    canonical = db.execute(
+        select(Planet.disc_method)
+        .where(func.lower(Planet.disc_method) == normalized.lower())
+        .where(Planet.is_deleted == False)
+        .limit(1)
+    ).scalar_one_or_none()
+
+    if canonical is None:
+        raise HTTPException(status_code=404, detail=f"No planets found for discovery method '{disc_method}'")
+
+    stats_stmt = (
+        select(
+            func.count(Planet.id).label("count"),
+            func.min(Planet.orbperd).label("orbperd_min"),
+            func.max(Planet.orbperd).label("orbperd_max"),
+            func.avg(Planet.orbperd).label("orbperd_avg"),
+            func.min(Planet.rade).label("rade_min"),
+            func.max(Planet.rade).label("rade_max"),
+            func.avg(Planet.rade).label("rade_avg"),
+            func.min(Planet.masse).label("masse_min"),
+            func.max(Planet.masse).label("masse_max"),
+            func.avg(Planet.masse).label("masse_avg"),
+            func.min(Planet.st_teff).label("st_teff_min"),
+            func.max(Planet.st_teff).label("st_teff_max"),
+            func.avg(Planet.st_teff).label("st_teff_avg"),
+            func.min(Planet.st_rad).label("st_rad_min"),
+            func.max(Planet.st_rad).label("st_rad_max"),
+            func.avg(Planet.st_rad).label("st_rad_avg"),
+            func.min(Planet.st_mass).label("st_mass_min"),
+            func.max(Planet.st_mass).label("st_mass_max"),
+            func.avg(Planet.st_mass).label("st_mass_avg"),
+        )
+        .where(func.lower(Planet.disc_method) == normalized.lower())
+        .where(Planet.is_deleted == False)
+    )
+
+    result = db.execute(stats_stmt).mappings().one()
+
+    def _summary(prefix: str) -> dict[str, float | None]:
+        return {
+            "min": float(result[f"{prefix}_min"]) if result[f"{prefix}_min"] is not None else None,
+            "max": float(result[f"{prefix}_max"]) if result[f"{prefix}_max"] is not None else None,
+            "avg": float(result[f"{prefix}_avg"]) if result[f"{prefix}_avg"] is not None else None,
+        }
+
+    return PlanetMethodStats(
+        disc_method=canonical,
+        count=int(result["count"] or 0),
+        orbperd=_summary("orbperd"),
+        rade=_summary("rade"),
+        masse=_summary("masse"),
+        st_teff=_summary("st_teff"),
+        st_rad=_summary("st_rad"),
+        st_mass=_summary("st_mass"),
+    )
 
 
 @router.get(
