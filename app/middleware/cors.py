@@ -7,6 +7,6 @@ def setup_cors(app) -> None:
         allow_origins=settings.CORS_ORIGINS,
         allow_origin_regex=settings.CORS_ORIGIN_REGEX,
         allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
-        allow_methods=["*"],   # en azından GET/OPTIONS kesin olmalı
+        allow_methods=["*"],
         allow_headers=["*"],
     )
