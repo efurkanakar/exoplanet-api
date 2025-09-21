@@ -430,21 +430,27 @@ def method_statistics(disc_method: str, db: Session = Depends(get_db)):
             func.min(Planet.orbperd).label("orbperd_min"),
             func.max(Planet.orbperd).label("orbperd_max"),
             func.avg(Planet.orbperd).label("orbperd_avg"),
+            func.percentile_cont(0.5).within_group(Planet.orbperd).label("orbperd_median"),
             func.min(Planet.rade).label("rade_min"),
             func.max(Planet.rade).label("rade_max"),
             func.avg(Planet.rade).label("rade_avg"),
+            func.percentile_cont(0.5).within_group(Planet.rade).label("rade_median"),
             func.min(Planet.masse).label("masse_min"),
             func.max(Planet.masse).label("masse_max"),
             func.avg(Planet.masse).label("masse_avg"),
+            func.percentile_cont(0.5).within_group(Planet.masse).label("masse_median"),
             func.min(Planet.st_teff).label("st_teff_min"),
             func.max(Planet.st_teff).label("st_teff_max"),
             func.avg(Planet.st_teff).label("st_teff_avg"),
+            func.percentile_cont(0.5).within_group(Planet.st_teff).label("st_teff_median"),
             func.min(Planet.st_rad).label("st_rad_min"),
             func.max(Planet.st_rad).label("st_rad_max"),
             func.avg(Planet.st_rad).label("st_rad_avg"),
+            func.percentile_cont(0.5).within_group(Planet.st_rad).label("st_rad_median"),
             func.min(Planet.st_mass).label("st_mass_min"),
             func.max(Planet.st_mass).label("st_mass_max"),
             func.avg(Planet.st_mass).label("st_mass_avg"),
+            func.percentile_cont(0.5).within_group(Planet.st_mass).label("st_mass_median"),
         )
         .where(func.lower(Planet.disc_method) == normalized.lower())
         .where(Planet.is_deleted == False)
@@ -457,6 +463,7 @@ def method_statistics(disc_method: str, db: Session = Depends(get_db)):
             "min": float(result[f"{prefix}_min"]) if result[f"{prefix}_min"] is not None else None,
             "max": float(result[f"{prefix}_max"]) if result[f"{prefix}_max"] is not None else None,
             "avg": float(result[f"{prefix}_avg"]) if result[f"{prefix}_avg"] is not None else None,
+            "median": float(result[f"{prefix}_median"]) if result.get(f"{prefix}_median") is not None else None,
         }
 
     return PlanetMethodStats(
