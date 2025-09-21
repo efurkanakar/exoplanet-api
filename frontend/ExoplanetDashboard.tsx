@@ -94,6 +94,8 @@ const DEFAULT_FILTERS: Filters = {
 };
 
 const DEFAULT_BASE_URL = "https://exoplanet-api-lg16.onrender.com";
+=======
+const DEFAULT_BASE_URL = "http://localhost:8000";
 
 const numericOrUndefined = (value: string): number | undefined => {
   if (value.trim() === "") {
@@ -380,9 +382,7 @@ const ExoplanetDashboard: React.FC = () => {
                 />
               </label>
               <small style={{ color: "#64748b" }}>
-                Yayındaki API için varsayılan değer olan <code>{DEFAULT_BASE_URL}</code> kullanılır.
-                Yerel geliştirme yapıyorsanız <code>http://localhost:8000</code> adresine
-                geçebilirsiniz.
+
               </small>
             </div>
 
