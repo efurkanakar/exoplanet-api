@@ -783,3 +783,37 @@ def wipe_planets(confirm: Literal[True, False] = Query(..., description="Set tru
         raise HTTPException(status_code=500, detail=f"Failed to truncate: {e}")
 
     return {"ok": True, "message": "All planets deleted, IDs reset."}
+
+
+@router.get(
+    "/methods",
+    response_model=list[str],
+    summary="List discovery methods",
+    description="Returns a sorted list of unique discovery methods. Excludes soft-deleted records by default."
+)
+def list_methods(
+    db: Session = Depends(get_db),
+    include_deleted: bool = Query(False, description="Include soft-deleted planets when extracting methods"),
+    search: str | None = Query(None, description="Case-insensitive substring filter on method name"),
+):
+    # Base statement: distinct discovery methods
+    stmt = select(func.distinct(Planet.disc_method)).where(Planet.disc_method.isnot(None))
+
+    # Exclude soft-deleted unless requested
+    if not include_deleted:
+        stmt = stmt.where(Planet.is_deleted == False)
+
+    # Optional substring search (case-insensitive)
+    if search:
+        q = search.strip()
+        if q:
+            stmt = stmt.where(Planet.disc_method.ilike(f"%{q}%"))
+
+    # Sort alphabetically for stable UX
+    stmt = stmt.order_by(func.lower(Planet.disc_method).asc())
+
+    rows = db.execute(stmt).all()
+    # rows is a list of 1-tuples like [('Transit',), ('Radial Velocity',) ...]
+    methods = [r[0] for r in rows if r[0] is not None]
+
+    return methods
