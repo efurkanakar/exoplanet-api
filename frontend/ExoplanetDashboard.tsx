@@ -93,6 +93,8 @@ const DEFAULT_FILTERS: Filters = {
   sort_order: "desc",
 };
 
+const DEFAULT_BASE_URL = "https://exoplanet-api-lg16.onrender.com";
+=======
 const DEFAULT_BASE_URL = "http://localhost:8000";
 
 const numericOrUndefined = (value: string): number | undefined => {
@@ -380,7 +382,7 @@ const ExoplanetDashboard: React.FC = () => {
                 />
               </label>
               <small style={{ color: "#64748b" }}>
-                Çoğu durumda varsayılan değer olan <code>{DEFAULT_BASE_URL}</code> kullanılabilir.
+
               </small>
             </div>
 
