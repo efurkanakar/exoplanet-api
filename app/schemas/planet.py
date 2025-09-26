@@ -165,11 +165,12 @@ class DeletedPlanetOut(BaseModel):
 
 
 class MetricSummary(BaseModel):
-    """Minimum, maximum and average summary for a numeric metric."""
+    """Minimum, maximum, average and median summary for a numeric metric."""
 
     min: Optional[float] = Field(None, description="Minimum value or null when unavailable")
     max: Optional[float] = Field(None, description="Maximum value or null when unavailable")
     avg: Optional[float] = Field(None, description="Average value or null when unavailable")
+    median: Optional[float] = Field(None, description="Median value or null when unavailable")
 
 
 class PlanetStats(BaseModel):
