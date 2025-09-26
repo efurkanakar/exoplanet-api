@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from datetime import datetime, timezone
 
 from app.db.session import get_db
-from app.db.models import Planet
+from app.db.models import Planet, PlanetChangeLog
 from app.schemas.planet import (
     PlanetCreate,
     PlanetOut,
@@ -21,6 +21,8 @@ from app.schemas.planet import (
     PlanetMethodStats,
     PlanetTimelinePoint,
     PlanetListResponse,
+    PlanetWithChanges,
+    PlanetChangeEntry,
 )
 from app.core.security import api_key_auth
 
@@ -29,9 +31,21 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/planets", tags=["planets"])
 
+TRACKED_FIELDS = (
+    "name",
+    "disc_method",
+    "disc_year",
+    "orbperd",
+    "rade",
+    "masse",
+    "st_teff",
+    "st_rad",
+    "st_mass",
+)
+
 @router.post(
     "/",
-    response_model=PlanetOut,
+    response_model=PlanetWithChanges,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new planet",
     description="Creates a planet and returns 201 with Location header."
@@ -57,7 +71,7 @@ def create_planet(
         db (Session): The SQLAlchemy database session.
 
     Returns:
-        PlanetOut: The newly created planet.
+        PlanetWithChanges: The newly created planet along with change metadata.
 
     Raises:
         HTTPException 409: If a planet with the same name already exists.
@@ -76,8 +90,23 @@ def create_planet(
     planet.updated_at = now
     db.add(planet)
 
+    change_entries: list[PlanetChangeEntry] = []
+
     try:
         db.flush()
+
+        change_entries = [
+            PlanetChangeEntry(field=field, before=None, after=getattr(planet, field))
+            for field in TRACKED_FIELDS
+        ]
+        db.add(
+            PlanetChangeLog(
+                planet_id=planet.id,
+                action="create",
+                changes=[entry.model_dump() for entry in change_entries],
+                created_at=now,
+            )
+        )
 
         location_url = request.url_for("get_planet", planet_id=planet.id)
 
@@ -95,7 +124,11 @@ def create_planet(
 
     db.refresh(planet)
 
-    return planet
+    planet_out = PlanetOut.model_validate(planet, from_attributes=True)
+    return PlanetWithChanges(
+        **planet_out.model_dump(),
+        changes=change_entries,
+    )
 
 @router.get(
     "/",
@@ -592,7 +625,7 @@ def list_deleted_planets(
     ]
 @router.patch(
     "/{planet_id}",
-    response_model=PlanetOut,
+    response_model=PlanetWithChanges,
     summary="Partially update a planet",
     description="Updates only provided fields; others remain unchanged.",
     dependencies=[Depends(api_key_auth)],
@@ -607,7 +640,7 @@ def update_planet_partial(planet_id: int, updates: PlanetUpdate, db: Session = D
         db (Session): SQLAlchemy database session.
 
     Returns:
-        PlanetOut: The updated planet.
+        PlanetWithChanges: The updated planet along with change metadata.
 
     Raises:
         HTTPException: 400 if the payload is empty.
@@ -624,10 +657,30 @@ def update_planet_partial(planet_id: int, updates: PlanetUpdate, db: Session = D
     if not data:
         raise HTTPException(status_code=400, detail="Empty update payload")
 
+    change_entries: list[PlanetChangeEntry] = []
     for k, v in data.items():
-        setattr(planet, k, v)
+        current_value = getattr(planet, k)
+        if v != current_value:
+            setattr(planet, k, v)
+            change_entries.append(
+                PlanetChangeEntry(field=k, before=current_value, after=v)
+            )
 
-    planet.updated_at = datetime.now(timezone.utc)
+    if not change_entries:
+        planet_out = PlanetOut.model_validate(planet, from_attributes=True)
+        return PlanetWithChanges(**planet_out.model_dump(), changes=[])
+
+    now = datetime.now(timezone.utc)
+    planet.updated_at = now
+
+    db.add(
+        PlanetChangeLog(
+            planet_id=planet.id,
+            action="update",
+            changes=[entry.model_dump() for entry in change_entries],
+            created_at=now,
+        )
+    )
 
     try:
         db.commit()
@@ -637,7 +690,8 @@ def update_planet_partial(planet_id: int, updates: PlanetUpdate, db: Session = D
         raise HTTPException(status_code=409, detail="Unique constraint failed")
 
     db.refresh(planet)
-    return planet
+    planet_out = PlanetOut.model_validate(planet, from_attributes=True)
+    return PlanetWithChanges(**planet_out.model_dump(), changes=change_entries)
 
 
 @router.delete(
