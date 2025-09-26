@@ -69,7 +69,11 @@ def create_planet(
         raise HTTPException(status_code=409, detail=f"Planet '{payload.name}' already exists.")
 
 
+    now = datetime.now(timezone.utc)
+
     planet = Planet(**payload.model_dump())
+    planet.created_at = now
+    planet.updated_at = now
     db.add(planet)
 
     try:
@@ -622,6 +626,8 @@ def update_planet_partial(planet_id: int, updates: PlanetUpdate, db: Session = D
 
     for k, v in data.items():
         setattr(planet, k, v)
+
+    planet.updated_at = datetime.now(timezone.utc)
 
     try:
         db.commit()
