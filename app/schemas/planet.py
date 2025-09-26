@@ -7,7 +7,7 @@ schemas for counts and soft-deleted listings.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any
 
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
@@ -90,6 +90,25 @@ class PlanetOut(PlanetBase):
     id: int
     created_at: datetime
     updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PlanetChangeEntry(BaseModel):
+    """Represents a single field change in a planet mutation."""
+
+    field: str = Field(..., description="Name of the field that changed")
+    before: Any | None = Field(None, description="Previous value before the change")
+    after: Any | None = Field(None, description="New value after the change")
+
+
+class PlanetWithChanges(PlanetOut):
+    """Planet response extended with change metadata."""
+
+    changes: list[PlanetChangeEntry] = Field(
+        default_factory=list,
+        description="List of individual field changes applied in the request",
+    )
 
     model_config = ConfigDict(from_attributes=True)
 

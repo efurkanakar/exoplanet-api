@@ -6,7 +6,20 @@ This module defines the SQLAlchemy ORM models for the database.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Index, func
+from typing import Any
+
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Float,
+    Boolean,
+    DateTime,
+    Index,
+    func,
+    ForeignKey,
+    JSON,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -70,4 +83,20 @@ class Planet(Base):
 
     __table_args__ = (
         Index("idx_planet_disc_year_method", "disc_year", "disc_method"),
+    )
+
+
+class PlanetChangeLog(Base):
+    """Audit log for planet mutations."""
+
+    __tablename__ = "planet_change_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    planet_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("planets.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    changes: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
