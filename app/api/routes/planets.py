@@ -23,6 +23,7 @@ from app.schemas.planet import (
     PlanetListResponse,
     PlanetWithChanges,
     PlanetChangeEntry,
+    PlanetChangeLogEntry,
 )
 from app.core.security import api_key_auth
 
@@ -520,6 +521,63 @@ def method_statistics(disc_method: str, db: Session = Depends(get_db)):
         st_rad=_summary("st_rad"),
         st_mass=_summary("st_mass"),
     )
+
+
+@router.get(
+    "/change-logs",
+    response_model=list[PlanetChangeLogEntry],
+    summary="List planet change logs",
+    description="Returns the most recent change log entries for planet mutations.",
+    dependencies=[Depends(api_key_auth)],
+)
+def list_planet_change_logs(
+    db: Session = Depends(get_db),
+    limit: int = Query(50, ge=1, le=200, description="Maximum number of entries to return"),
+    offset: int = Query(0, ge=0, description="Number of entries to skip"),
+    planet_id: int | None = Query(
+        None, description="Filter change logs for a specific planet id"
+    ),
+):
+    """Fetch change log entries captured for planet create/update operations."""
+
+    stmt = (
+        select(
+            PlanetChangeLog.id,
+            PlanetChangeLog.planet_id,
+            Planet.name.label("planet_name"),
+            PlanetChangeLog.action,
+            PlanetChangeLog.changes,
+            PlanetChangeLog.created_at,
+        )
+        .join(Planet, Planet.id == PlanetChangeLog.planet_id)
+        .order_by(PlanetChangeLog.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+
+    if planet_id is not None:
+        stmt = stmt.where(PlanetChangeLog.planet_id == planet_id)
+
+    rows = db.execute(stmt).mappings().all()
+
+    entries: list[PlanetChangeLogEntry] = []
+    for row in rows:
+        changes_payload = row["changes"] or []
+        entries.append(
+            PlanetChangeLogEntry(
+                id=row["id"],
+                planet_id=row["planet_id"],
+                planet_name=row["planet_name"],
+                action=row["action"],
+                created_at=row["created_at"],
+                changes=[
+                    PlanetChangeEntry.model_validate(change)
+                    for change in changes_payload
+                ],
+            )
+        )
+
+    return entries
 
 
 @router.get(

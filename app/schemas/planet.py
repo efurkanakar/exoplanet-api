@@ -113,6 +113,22 @@ class PlanetWithChanges(PlanetOut):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PlanetChangeLogEntry(BaseModel):
+    """Represents a persisted change log entry for a planet mutation."""
+
+    id: int = Field(..., description="Unique identifier of the change log entry")
+    planet_id: int = Field(..., description="Identifier of the planet that changed")
+    planet_name: str = Field(..., description="Human-readable planet name")
+    action: str = Field(..., description="Type of mutation such as create or update")
+    changes: list[PlanetChangeEntry] = Field(
+        default_factory=list,
+        description="Detailed field-level differences captured for the mutation",
+    )
+    created_at: datetime = Field(..., description="Timestamp when the change was recorded (UTC)")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ---------------------------
 # PATCH
 # ---------------------------
