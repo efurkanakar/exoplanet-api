@@ -528,7 +528,6 @@ def method_statistics(disc_method: str, db: Session = Depends(get_db)):
     response_model=list[PlanetChangeLogEntry],
     summary="List planet change logs",
     description="Returns the most recent change log entries for planet mutations.",
-    dependencies=[Depends(api_key_auth)],
 )
 def list_planet_change_logs(
     db: Session = Depends(get_db),
