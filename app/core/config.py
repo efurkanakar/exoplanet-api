@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "https://efurkanakar.github.io"
     ]
     CORS_ORIGIN_REGEX: str | None = None
     CORS_ALLOW_CREDENTIALS: bool = False
