@@ -9,7 +9,7 @@ A FastAPI-based service for storing, querying, and analyzing exoplanet data. The
 - **Uvicorn** as the ASGI server.
 - **Custom middleware** (CORS and structured request logging) for cross-origin support and observability.
 
-Project layout (schematic):
+Project layout:
 
 ```
 exoplanet-api/
