@@ -179,7 +179,32 @@ def list_planets(
     ] = Query("id", description="Column to sort by"),
     sort_order: Literal["asc", "desc"] = Query("desc", description="Sort direction"),
 ):
-    """Retrieve planets with advanced filtering, sorting and pagination metadata."""
+    """
+    Retrieve planets with extensive filtering, sorting, and pagination support.
+
+    Args:
+        db (Session): SQLAlchemy database session dependency.
+        limit (int): Maximum number of planets to return in this page.
+        offset (int): Number of matching planets to skip before collecting results.
+        name (str | None): Optional case-insensitive substring filter on planet name.
+        disc_method (str | None): Optional exact match filter on discovery method.
+        min_year/max_year (int | None): Inclusive bounds for discovery year.
+        min_orbperd/max_orbperd (float | None): Inclusive bounds for orbital period in days.
+        min_rade/max_rade (float | None): Inclusive bounds for radius expressed in Earth radii.
+        min_masse/max_masse (float | None): Inclusive bounds for mass expressed in Earth masses.
+        min_st_teff/max_st_teff (float | None): Inclusive bounds for host star effective temperature.
+        min_st_rad/max_st_rad (float | None): Inclusive bounds for host star radius in Solar radii.
+        min_st_mass/max_st_mass (float | None): Inclusive bounds for host star mass in Solar masses.
+        include_deleted (bool): When False, filters out soft-deleted planets.
+        sort_by (Literal): Database column used for ordering, defaults to `id`.
+        sort_order (Literal): Sort direction (`asc` | `desc`).
+
+    Returns:
+        PlanetListResponse: Envelope containing matching planets plus paging metadata.
+
+    Raises:
+        HTTPException 400: If any provided min/max range is inverted (min > max).
+    """
 
     conditions = []
     if not include_deleted:
@@ -356,7 +381,15 @@ def method_counts(db: Session = Depends(get_db)):
     description="Returns min/max/average values for key planet and host star metrics.",
 )
 def planet_statistics(db: Session = Depends(get_db)):
-    """Return aggregated statistics for all non-deleted planets."""
+    """Compute aggregate statistics across all non-deleted planets.
+
+    Args:
+        db (Session): SQLAlchemy database session dependency.
+
+    Returns:
+        PlanetStats: Aggregated totals and descriptive statistics (min/max/avg/median)
+            for orbital period, radius, mass, and host star metrics.
+    """
 
     stats_stmt = (
         select(
@@ -392,6 +425,7 @@ def planet_statistics(db: Session = Depends(get_db)):
     result = db.execute(stats_stmt).mappings().one()
 
     def _summary(prefix: str) -> dict[str, float | None]:
+        """Build a summary dictionary for a metrics group using the query result."""
         return {
             "min": float(result[f"{prefix}_min"]) if result[f"{prefix}_min"] is not None else None,
             "max": float(result[f"{prefix}_max"]) if result[f"{prefix}_max"] is not None else None,
@@ -422,7 +456,21 @@ def planet_timeline(
     end_year: int | None = Query(None, ge=0, description="Optional end year filter"),
     include_deleted: bool = Query(False, description="Include soft-deleted discoveries"),
 ):
-    """Return discovery counts grouped by year with optional bounds."""
+    """
+    Summarize discovery counts by year with optional bounds and soft-delete control.
+
+    Args:
+        db (Session): SQLAlchemy database session dependency.
+        start_year (int | None): Optional inclusive lower bound for discovery year.
+        end_year (int | None): Optional inclusive upper bound for discovery year.
+        include_deleted (bool): When False, excludes soft-deleted planets from the counts.
+
+    Returns:
+        list[PlanetTimelinePoint]: Chronologically ordered list of yearly discovery totals.
+
+    Raises:
+        HTTPException 400: If `start_year` is provided and greater than `end_year`.
+    """
 
     if start_year is not None and end_year is not None and start_year > end_year:
         raise HTTPException(status_code=400, detail="start_year must be <= end_year")
@@ -453,7 +501,20 @@ def planet_timeline(
     description="Returns aggregate statistics scoped to a specific discovery method.",
 )
 def method_statistics(disc_method: str, db: Session = Depends(get_db)):
-    """Return aggregated statistics for the provided discovery method."""
+    """
+    Compute aggregate statistics for planets discovered via a specific method.
+
+    Args:
+        disc_method (str): Case-insensitive discovery method name supplied by the caller.
+        db (Session): SQLAlchemy database session dependency.
+
+    Returns:
+        PlanetMethodStats: Aggregated metrics describing planets for the chosen method.
+
+    Raises:
+        HTTPException 400: If no discovery method value is provided.
+        HTTPException 404: If the supplied discovery method has no matching planets.
+    """
 
     normalized = disc_method.strip()
     if not normalized:
@@ -504,6 +565,7 @@ def method_statistics(disc_method: str, db: Session = Depends(get_db)):
     result = db.execute(stats_stmt).mappings().one()
 
     def _summary(prefix: str) -> dict[str, float | None]:
+        """Build a descriptive statistics dictionary for the current result set."""
         return {
             "min": float(result[f"{prefix}_min"]) if result[f"{prefix}_min"] is not None else None,
             "max": float(result[f"{prefix}_max"]) if result[f"{prefix}_max"] is not None else None,
@@ -921,6 +983,17 @@ def list_methods(
     include_deleted: bool = Query(False, description="Include soft-deleted planets when extracting methods"),
     search: str | None = Query(None, description="Case-insensitive substring filter on method name"),
 ):
+    """
+    Return distinct discovery methods with optional soft-delete and search filters.
+
+    Args:
+        db (Session): SQLAlchemy database session dependency.
+        include_deleted (bool): Include soft-deleted planets when deriving discovery methods.
+        search (str | None): Optional case-insensitive substring to narrow the method list.
+
+    Returns:
+        list[str]: Alphabetically ordered list of unique discovery method labels.
+    """
     # Base statement: distinct discovery methods
     stmt = select(func.distinct(Planet.disc_method)).where(Planet.disc_method.isnot(None))
 

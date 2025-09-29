@@ -31,7 +31,7 @@ def upgrade() -> None:
         sa.Column("st_mass", sa.Float(), nullable=False),
     )
 
-    # indexler
+    # index
     op.create_index("ix_planets_id", "planets", ["id"])
     op.create_index("ix_planets_disc_method", "planets", ["disc_method"])
     op.create_index("ix_planets_disc_year", "planets", ["disc_year"])

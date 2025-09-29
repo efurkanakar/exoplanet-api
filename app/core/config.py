@@ -27,7 +27,6 @@ class Settings(BaseSettings):
         return v
 
     model_config = SettingsConfigDict(
-        # Render ortamında .env okunmasın; localde .env kullanılsın
         env_file=None if os.getenv("ENV", "").lower() in {"prod", "production"} or os.getenv("RENDER") else ".env"
     )
 
