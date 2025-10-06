@@ -1,7 +1,7 @@
 # app/core/config.py
 import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator  # ← EKLE
+from pydantic import field_validator
 
 class Settings(BaseSettings):
     DATABASE_URL: str
